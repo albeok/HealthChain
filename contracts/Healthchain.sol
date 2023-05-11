@@ -5,13 +5,6 @@ pragma solidity ^0.8.8;
 ///////////// ERRORS /////////////
 //////////////////////////////////
 error HealthChain__youAlreadyHaveAnAccount();
-error HealthChain__patientExists();
-error HealthChain__patientAlreadyExists();
-error HealthChain__youAreAlreadyAPatient();
-error HealthChain__patientDoesntExists();
-error HealthChain__doctorExists();
-error HealthChain__youAreAlreadyADoctor();
-error HealthChain__youAreNotADoctor();
 error HealthChain__MedicalRecordNotFound();
 error HealthChain__notYourData();
 error HealthChain__cantAccessData();
@@ -92,9 +85,7 @@ contract HealthChain {
     mapping(address => Patient) private s_patients;
     mapping(address => Doctor) private s_doctors;
     mapping(address => MedicalRecord[]) private s_medicalRecords;
-    mapping(address => Request[]) private s_pendingRequests;
-    mapping(address => uint256) private s_numMedicalRecords;
-    mapping(address => uint256) private s_numPendingRequests;
+    mapping(address => Request[]) private s_requests;
 
     ///////////////////////////////////
     ///////////// EVENTS //////////////
@@ -104,16 +95,23 @@ contract HealthChain {
     event patientCreated(address id, string name, string surname);
     event doctorUpdated(address id, string name, string surname);
     event patientUpdated(address id, string name, string surname);
-    event medicalRecordCreated(uint256 medicalRecordId);
-    event medicalRecordDeleted(uint256 medicalRecordId);
-    event medicalRecordUpdated(uint256 medicalRecordId);
-    event RequestCreated(
+    event requestCreated(
         uint256 requestId,
         address patientAddress,
         address doctorAddress
     );
-    event RequestApproved(uint256 requestId, address patientAddress);
-    event RequestRejected(uint256 requestId, address patientAddress);
+    event requestApproved(uint256 requestId, address patientAddress);
+    event requestRejected(uint256 requestId, address patientAddress);
+    event medicalRecordCreated(
+        uint256 medicalRecordId,
+        address patientAddress,
+        address doctorAddress
+    );
+    event medicalRecordUpdated(
+        uint256 medicalRecordId,
+        address patientAddress,
+        address doctorAddress
+    );
 
     ///////////////////////////////////
     //////////// MODIFIER /////////////
@@ -269,7 +267,7 @@ contract HealthChain {
         uint256 requestId = uint256(
             keccak256(abi.encodePacked(block.timestamp, msg.sender))
         );
-        s_pendingRequests[patientAddress].push(
+        s_requests[patientAddress].push(
             Request(
                 requestId,
                 patientAddress,
@@ -278,14 +276,14 @@ contract HealthChain {
                 RequestStatus.Pending
             )
         );
-        emit RequestCreated(requestId, patientAddress, msg.sender);
+        emit requestCreated(requestId, patientAddress, msg.sender);
     }
 
     function respondToRequest(
         uint256 requestId,
         bool approved
     ) public onlyPatient {
-        Request[] storage requests = s_pendingRequests[msg.sender];
+        Request[] storage requests = s_requests[msg.sender];
 
         bool foundRequest = false;
         for (uint256 i = 0; i < requests.length; i++) {
@@ -297,10 +295,10 @@ contract HealthChain {
                 foundRequest = true;
                 if (approved == true) {
                     requests[i].status = RequestStatus.Approved;
-                    emit RequestApproved(requestId, msg.sender);
+                    emit requestApproved(requestId, msg.sender);
                 } else {
                     requests[i].status = RequestStatus.Rejected;
-                    emit RequestRejected(requestId, msg.sender);
+                    emit requestRejected(requestId, msg.sender);
                 }
                 break;
             }
@@ -318,7 +316,7 @@ contract HealthChain {
         string memory details
     ) public onlyDoctor patientExists(patientId) {
         // verifying if the request to access has been accepted by the patient
-        Request[] storage requests = s_pendingRequests[patientId];
+        Request[] storage requests = s_requests[patientId];
         bool found = false;
         for (uint256 i = 0; i < requests.length; i++) {
             if (
@@ -327,14 +325,9 @@ contract HealthChain {
                 requests[i].status == RequestStatus.Approved
             ) {
                 found = true;
+                requests[i].status = RequestStatus.Pending;
                 uint256 medicalRecordId = uint256(
-                    uint160(
-                        bytes20(
-                            keccak256(
-                                abi.encodePacked(msg.sender, block.timestamp)
-                            )
-                        )
-                    )
+                    keccak256(abi.encodePacked(block.timestamp, msg.sender))
                 );
                 s_medicalRecords[patientId].push(
                     MedicalRecord(
@@ -347,9 +340,11 @@ contract HealthChain {
                         details
                     )
                 );
-                s_numMedicalRecords[patientId]++;
-                emit medicalRecordCreated(medicalRecordId);
-                requests[i].status = RequestStatus.Pending;
+                emit medicalRecordCreated(
+                    medicalRecordId,
+                    patientId,
+                    msg.sender
+                );
                 break;
             }
         }
@@ -367,7 +362,7 @@ contract HealthChain {
         string memory details
     ) public onlyDoctor {
         // verifying if the request to access has been accepted by the patient
-        Request[] storage requests = s_pendingRequests[patientId];
+        Request[] storage requests = s_requests[patientId];
         bool approved = false;
         for (uint256 i = 0; i < requests.length; i++) {
             if (
@@ -376,6 +371,7 @@ contract HealthChain {
                 requests[i].status == RequestStatus.Approved
             ) {
                 approved = true;
+                requests[i].status = RequestStatus.Pending;
                 break;
             }
         }
@@ -393,7 +389,11 @@ contract HealthChain {
                 medicalRecords[i].details = details;
                 medicalRecords[i].timeAdded = block.timestamp;
 
-                emit medicalRecordUpdated(medicalRecordId);
+                emit medicalRecordUpdated(
+                    medicalRecordId,
+                    patientId,
+                    msg.sender
+                );
                 break;
             }
         }
@@ -403,7 +403,7 @@ contract HealthChain {
     }
 
     ///////////////////////////////////
-    //////// GETTER FUNCTION //////////
+    ////////// VIEW FUNCTIONS /////////
     ///////////////////////////////////
 
     function getDoctorData(
@@ -416,14 +416,11 @@ contract HealthChain {
     function getPatientData(
         address patientId
     ) public view patientExists(patientId) returns (Patient memory) {
-        if (
-            s_patients[patientId].id != msg.sender &&
-            s_doctors[msg.sender].id != msg.sender
-        ) {
-            revert HealthChain__cantAccessData();
+        if (msg.sender == patientId) {
+            Patient memory patient = s_patients[patientId];
+            return patient;
         }
-        Patient memory patient = s_patients[patientId];
-        return patient;
+        revert HealthChain__cantAccessData();
     }
 
     function getPatientsDoctorNumber(
@@ -433,58 +430,37 @@ contract HealthChain {
         return doctorTelephone;
     }
 
-    function getNumMedicalRecords(
-        address patientId
-    ) public view patientExists(patientId) returns (uint256) {
-        if (
-            s_patients[patientId].id != msg.sender &&
-            s_doctors[msg.sender].id != msg.sender
-        ) {
-            revert HealthChain__cantAccessData();
-        }
-        return s_numMedicalRecords[patientId];
-    }
-
     function getMedicalRecords(
         address patientId
     ) public view returns (MedicalRecord[] memory) {
-        if (
-            s_patients[patientId].id != msg.sender &&
-            s_doctors[msg.sender].id != msg.sender
-        ) {
-            revert HealthChain__cantAccessData();
+        if (msg.sender == patientId) {
+            return s_medicalRecords[patientId];
         }
-        return s_medicalRecords[patientId];
+        revert HealthChain__cantAccessData();
     }
 
     function getMedicalRecordById(
         uint256 medicalRecordId,
         address patientId
     ) public view returns (MedicalRecord memory) {
-        if (
-            s_patients[patientId].id != msg.sender &&
-            s_doctors[msg.sender].id != msg.sender
-        ) {
-            revert HealthChain__cantAccessData();
-        }
-        MedicalRecord[] storage medicalRecords = s_medicalRecords[patientId];
-        for (uint256 i = 0; i < medicalRecords.length; i++) {
-            if (medicalRecords[i].id == medicalRecordId) {
-                return medicalRecords[i];
+        MedicalRecord[] memory medicalRecords = s_medicalRecords[patientId];
+        if (msg.sender == patientId) {
+            for (uint256 i = 0; i < medicalRecords.length; i++) {
+                if (medicalRecords[i].id == medicalRecordId) {
+                    return medicalRecords[i];
+                }
             }
+            revert HealthChain__MedicalRecordNotFound();
         }
-        revert HealthChain__MedicalRecordNotFound();
+        revert HealthChain__cantAccessData();
     }
 
-    function getPendingRequests(
+    function getRequests(
         address patientId
     ) public view returns (Request[] memory) {
-        if (
-            s_patients[patientId].id != msg.sender &&
-            s_doctors[msg.sender].id != msg.sender
-        ) {
-            revert HealthChain__cantAccessData();
+        if (msg.sender == patientId) {
+            return s_requests[patientId];
         }
-        return s_pendingRequests[patientId];
+        revert HealthChain__notYourData();
     }
 }

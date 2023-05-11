@@ -1,10 +1,9 @@
 # HEALTHCHAIN README
 
-This repository contains the source code for the Ethereum smart contract deployed at [0x5268153C5e93ebCfc490Ce3c0B06AB77973A9Ca2](https://sepolia.etherscan.io/address/0x5268153C5e93ebCfc490Ce3c0B06AB77973A9Ca2#code).
-
+This repository contains the source code for the Ethereum smart contract deployed at [0x5b49360C87c9bc58b8A6B7FF3C26b8C3B98a2db5](https://sepolia.etherscan.io/address/0x5b49360C87c9bc58b8A6B7FF3C26b8C3B98a2db5#code)
 ## HEALTHCHAIN Details
 
-- **Contract Address**: [0x5268153C5e93ebCfc490Ce3c0B06AB77973A9Ca2](https://sepolia.etherscan.io/address/0x5268153C5e93ebCfc490Ce3c0B06AB77973A9Ca2#code)
+- **Contract Address**: [0x5b49360C87c9bc58b8A6B7FF3C26b8C3B98a2db5](https://sepolia.etherscan.io/address/0x5b49360C87c9bc58b8A6B7FF3C26b8C3B98a2db5#code)
 - **Compiler Version**: Solidity 0.8.18
 
 ## Description
@@ -15,7 +14,7 @@ HealthChain is a decentralized health records management system built on the Eth
 
 - **Doctors and Patients**: HealthChain allows doctors and patients to create their accounts and manage their personal information.
 
-- **Medical Records**: Doctors can create, update, and delete medical records for their patients. Each medical record includes details such as the patient's information, file name, hospital, and additional details.
+- **Medical Records**: Doctors can create and update medical records for their patients. Each medical record includes details such as the patient's information, file name, hospital, and additional details.
 
 - **Access Control**: Patients have full control over their medical records and can grant access to specific doctors by approving their access requests. Doctors can request access to a patient's medical records, which the patient can approve or reject.
 

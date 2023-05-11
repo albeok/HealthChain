@@ -9,11 +9,10 @@ const { developmentChains } = require("../../helper-hardhat-config")
         let deployer;
         let doctor;
         let patient;
-        let patient1;
         let signers;
         beforeEach(async () => {
             signers = await ethers.getSigners();
-            [deployer, doctor, patient, patient1] = signers;
+            [deployer, doctor, patient] = signers;
             await deployments.fixture(["all"]);
             healthChain = await ethers.getContract("HealthChain", deployer);
         })
@@ -106,16 +105,15 @@ const { developmentChains } = require("../../helper-hardhat-config")
             const country = "country";
             it("stores the data correctly and get patient data works", async () => {
                 const healthChainWithPatient = healthChain.connect(patient);
-                const tx = await healthChainWithPatient.createPatient(
+                await healthChainWithPatient.createPatient(
                     name, surname, dateOfBirth, email, telephone,
                     telephone2, doctorTelephone,
                     zipCode, city, country
                 );
-                const receipt = await tx.wait();
-                const patientId = receipt.events[0].args[0];
-                const patientData = await healthChainWithPatient.getPatientData(patientId);
 
-                assert.equal(patientData.id, patientId);
+                const patientData = await healthChainWithPatient.getPatientData(patient.address);
+
+                assert.equal(patientData.id, patient.address);
                 assert.equal(patientData.name, name);
                 assert.equal(patientData.surname, surname);
                 assert.equal(patientData.dateOfBirth, dateOfBirth);
@@ -165,16 +163,24 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 const zipCode2 = "updated";
                 const city2 = "updated";
                 const country2 = "updated";
+
                 const healthChainWithPatient = healthChain.connect(patient);
                 await healthChainWithPatient.createPatient(name, surname,
                     dateOfBirth, email, telephone, telephone2, doctorTelephone,
                     zipCode, city, country);
+                const healthChainWithDoctor = healthChain.connect(doctor);
+                await healthChainWithDoctor.createDoctor(name, surname,
+                    dateOfBirth, email, telephone,
+                    zipCode, city, country);
+
                 await healthChainWithPatient.updatePatient(
                     patient.address, name2, surname2, dateOfBirth2,
                     email2, telephone2, telephone22, doctorTelephone2,
                     zipCode2, city2, country2
                 );
+
                 const patientUpdated = await healthChainWithPatient.getPatientData(patient.address);
+
                 assert.equal(patientUpdated.id, patient.address);
                 assert.equal(patientUpdated.name, name2);
                 assert.equal(patientUpdated.surname, surname2);
@@ -186,6 +192,31 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 assert.equal(patientUpdated.zipCode, zipCode2);
                 assert.equal(patientUpdated.city, city2);
                 assert.equal(patientUpdated.country, country2);
+            });
+
+            it("gets a patient's doctor number", async () => {
+                const healthChainWithPatient = healthChain.connect(patient);
+                await healthChainWithPatient.createPatient(name, surname,
+                    dateOfBirth, email, telephone, telephone2, doctorTelephone,
+                    zipCode, city, country);
+
+                const patient1 = await healthChainWithPatient.getPatientData(patient.address);
+                const doctorTelephoneToCompare = "doctorTelephone";
+                assert.equal(patient1.doctorTelephone, doctorTelephoneToCompare);
+            });
+
+            it("should revert if someone other than the actual patient attemps to access his/her data", async () => {
+                const healthChainWithPatient = healthChain.connect(patient);
+                await healthChainWithPatient.createPatient(name, surname,
+                    dateOfBirth, email, telephone, telephone2, doctorTelephone,
+                    zipCode, city, country);
+                const healthChainWithDoctor = healthChain.connect(doctor);
+                await healthChainWithDoctor.createDoctor(name, surname,
+                    dateOfBirth, email, telephone,
+                    zipCode, city, country);
+
+                await expect(healthChainWithDoctor.getPatientData(patient.address))
+                    .to.be.revertedWith("HealthChain__cantAccessData");
             });
         });
         describe("Requests and Medical Records", function () {
@@ -205,64 +236,7 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 2: 2 //'Rejected'
             };
 
-            it("create a request successfully emit an event and has to be pending", async () => {
-                const healthChainWithPatient = healthChain.connect(patient);
-                await healthChainWithPatient.createPatient(name, surname,
-                    dateOfBirth, email, telephone, telephone2, doctorTelephone,
-                    zipCode, city, country);
-                const healthChainWithDoctor = healthChain.connect(doctor);
-                await healthChainWithDoctor.createDoctor(name, surname,
-                    dateOfBirth, email, telephone,
-                    zipCode, city, country);
-
-                const tx = await healthChainWithDoctor.createRequest(patient.address);
-                const receipt = await tx.wait();
-                const requestId = await receipt.events[0].args[0];
-
-                const requests = await healthChainWithDoctor.getPendingRequests(patient.address);
-                const pending = RequestStatus[0];
-
-                assert.equal(requestId.toString(), requests[requests.length - 1].requestId.toString());
-                assert.equal(requests[requests.length - 1].status, pending);
-                await expect(tx).to.emit(healthChain, "RequestCreated").withArgs(requestId, patient.address, doctor.address);
-            });
-
-            it("should be approved when you do approve the request", async () => {
-                const healthChainWithPatient = healthChain.connect(patient);
-                await healthChainWithPatient.createPatient(name, surname, dateOfBirth, email, telephone, telephone2, doctorTelephone, zipCode, city, country);
-
-                const healthChainWithDoctor = healthChain.connect(doctor);
-                await healthChainWithDoctor.createDoctor(name, surname, dateOfBirth, email, telephone, zipCode, city, country);
-
-                const tx_createRequest = await healthChainWithDoctor.createRequest(patient.address);
-                const receipt_createRequest = await tx_createRequest.wait();
-                const requestId = receipt_createRequest.events[0].args[0];
-                const tx_respondRequest = await healthChainWithPatient.respondToRequest(requestId, true);
-                await tx_respondRequest.wait(1);
-
-                const approved = RequestStatus[1];
-                const requests = await healthChainWithDoctor.getPendingRequests(patient.address);
-                assert.equal(approved, requests[requests.length - 1].status);
-
-            });
-
-            it("should emit request approved event when you do approve the request", async () => {
-                const healthChainWithPatient = healthChain.connect(patient);
-                await healthChainWithPatient.createPatient(name, surname, dateOfBirth, email, telephone, telephone2, doctorTelephone, zipCode, city, country);
-
-                const healthChainWithDoctor = healthChain.connect(doctor);
-                await healthChainWithDoctor.createDoctor(name, surname, dateOfBirth, email, telephone, zipCode, city, country);
-
-                const tx = await healthChainWithDoctor.createRequest(patient.address);
-                const receipt = await tx.wait();
-                const requestId = receipt.events[0].args[0];
-
-                await expect(await healthChainWithPatient.respondToRequest(requestId, true))
-                    .to.emit(healthChain, "RequestApproved")
-                    .withArgs(requestId, patient.address);
-            });
-
-            it("should create a medical record if the request is approved", async () => {
+            it("create a request successfully, request should be approved and emit an event", async () => {
                 const healthChainWithPatient = healthChain.connect(patient);
                 await healthChainWithPatient.createPatient(name, surname,
                     dateOfBirth, email, telephone, telephone2, doctorTelephone,
@@ -277,12 +251,32 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 const requestId = await receipt.events[0].args[0];
                 await healthChainWithPatient.respondToRequest(requestId, true);
 
-                const fileName = "fileName";
-                const hospital = "hospital";
-                const details = "details";
-                const tx_createMedicalRecord = await healthChainWithDoctor.createMedicalRecord(
-                    requestId, patient.address, fileName, hospital, details);
-                expect(tx_createMedicalRecord).to.emit(healthChain, "medicalRecordCreated");
+                const requests = await healthChainWithPatient.getRequests(patient.address);
+                const approved = RequestStatus[1];
+
+                assert.equal(requestId.toString(), requests[0].requestId.toString());
+                assert.equal(requests[0].status, approved);
+                await expect(tx).to.emit(healthChain, "requestCreated").withArgs(requestId, patient.address, doctor.address);
+            });
+
+            it("get the requests of a certain address successfully", async () => {
+                const healthChainWithPatient = healthChain.connect(patient);
+                await healthChainWithPatient.createPatient(name, surname,
+                    dateOfBirth, email, telephone, telephone2, doctorTelephone,
+                    zipCode, city, country);
+                const healthChainWithDoctor = healthChain.connect(doctor);
+                await healthChainWithDoctor.createDoctor(name, surname,
+                    dateOfBirth, email, telephone,
+                    zipCode, city, country);
+
+                const tx = await healthChainWithDoctor.createRequest(patient.address);
+                const receipt = await tx.wait();
+                const requestId = await receipt.events[0].args[0];
+                await healthChainWithPatient.respondToRequest(requestId, true);
+
+                const requests = await healthChainWithPatient.getRequests(patient.address);
+
+                assert.equal(requestId.toString(), requests[0].requestId.toString());
             });
 
             it("should create a medical record properly", async () => {
@@ -305,11 +299,40 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 const details = "details";
                 await healthChainWithDoctor.createMedicalRecord(
                     requestId, patient.address, fileName, hospital, details);
-                const medicalRecords = await healthChainWithDoctor.getMedicalRecords(patient.address);
+
+                const medicalRecords = await healthChainWithPatient.getMedicalRecords(patient.address);
                 assert.equal(medicalRecords[0].fileName, fileName);
                 assert.equal(medicalRecords[0].hospital, hospital);
                 assert.equal(medicalRecords[0].details, details);
             });
+
+            it("should emit the event medicalRecordCreated when a medical record is created", async () => {
+                const healthChainWithPatient = healthChain.connect(patient);
+                await healthChainWithPatient.createPatient(name, surname,
+                    dateOfBirth, email, telephone, telephone2, doctorTelephone,
+                    zipCode, city, country);
+                const healthChainWithDoctor = healthChain.connect(doctor);
+                await healthChainWithDoctor.createDoctor(name, surname,
+                    dateOfBirth, email, telephone,
+                    zipCode, city, country);
+
+                const tx = await healthChainWithDoctor.createRequest(patient.address);
+                const receipt = await tx.wait();
+                const requestId = await receipt.events[0].args[0];
+                await healthChainWithPatient.respondToRequest(requestId, true);
+
+                const fileName = "fileName";
+                const hospital = "hospital";
+                const details = "details";
+                const tx_createMedicalRecord = await healthChainWithDoctor.createMedicalRecord(
+                    requestId, patient.address, fileName, hospital, details);
+
+                const medicalRecords = await healthChainWithPatient.getMedicalRecords(patient.address);
+                await expect(tx_createMedicalRecord)
+                    .to.emit(healthChain, "medicalRecordCreated")
+                    .withArgs(medicalRecords[0].id, patient.address, doctor.address);
+            });
+
             it("update a medical record", async () => {
                 const healthChainWithPatient = healthChain.connect(patient);
                 await healthChainWithPatient.createPatient(name, surname,
@@ -331,11 +354,6 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 await healthChainWithDoctor.createMedicalRecord(
                     requestId, patient.address, fileName, hospital, details);
 
-                const tx_2 = await healthChainWithDoctor.createRequest(patient.address);
-                const receipt_2 = await tx_2.wait();
-                const requestId_2 = await receipt_2.events[0].args[0];
-                await healthChainWithPatient.respondToRequest(requestId_2, true);
-
                 const medicalRecords = await healthChainWithPatient.getMedicalRecords(patient.address);
                 const medicalRecord = medicalRecords[0];
                 const medicalRecordId = medicalRecord.id;
@@ -344,37 +362,22 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 const hospital2 = "updated";
                 const details2 = "updated";
 
+                const tx_1 = await healthChainWithDoctor.createRequest(patient.address);
+                const receipt_1 = await tx_1.wait();
+                const requestId_1 = await receipt_1.events[0].args[0];
+                await healthChainWithPatient.respondToRequest(requestId_1, true);
+
                 await healthChainWithDoctor.updateMedicalRecord(patient.address,
-                    medicalRecordId, requestId_2, fileName2, hospital2, details2);
+                    medicalRecordId, requestId_1, fileName2, hospital2, details2);
+
                 const updatedMedicalRecords = await healthChainWithPatient.getMedicalRecords(patient.address);
                 const updatedMedicalRecord = updatedMedicalRecords[0];
+
                 assert.equal(updatedMedicalRecord.fileName, fileName2);
                 assert.equal(updatedMedicalRecord.hospital, hospital2);
                 assert.equal(updatedMedicalRecord.details, details2);
             });
-            it("get the number of medical record of a certain address", async () => {
-                const healthChainWithPatient = healthChain.connect(patient);
-                await healthChainWithPatient.createPatient(name, surname,
-                    dateOfBirth, email, telephone, telephone2, doctorTelephone,
-                    zipCode, city, country);
-                const healthChainWithDoctor = healthChain.connect(doctor);
-                await healthChainWithDoctor.createDoctor(name, surname,
-                    dateOfBirth, email, telephone,
-                    zipCode, city, country);
 
-                const tx = await healthChainWithDoctor.createRequest(patient.address);
-                const receipt = await tx.wait();
-                const requestId = await receipt.events[0].args[0];
-                await healthChainWithPatient.respondToRequest(requestId, true);
-
-                const fileName = "fileName";
-                const hospital = "hospital";
-                const details = "details";
-                await healthChainWithDoctor.createMedicalRecord(
-                    requestId, patient.address, fileName, hospital, details);
-                const numMedicalRecord = await healthChainWithPatient.getNumMedicalRecords(patient.address);
-                assert.equal(numMedicalRecord, 1);
-            });
             it("get the medical record by its id", async () => {
                 const healthChainWithPatient = healthChain.connect(patient);
                 await healthChainWithPatient.createPatient(name, surname,
@@ -393,14 +396,15 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 const fileName = "fileName";
                 const hospital = "hospital";
                 const details = "details";
-                await healthChainWithDoctor.createMedicalRecord(
-                    requestId, patient.address, fileName, hospital, details);
+                await healthChainWithDoctor.createMedicalRecord(requestId, patient.address, fileName, hospital, details);
 
                 const medicalRecords = await healthChainWithPatient.getMedicalRecords(patient.address);
                 const medicalRecord = medicalRecords[0];
                 const medicalRecordId = medicalRecord.id;
 
-                const medicalRecordById = await healthChainWithDoctor.getMedicalRecordById(medicalRecordId, patient.address);
+                const medicalRecordById = await healthChainWithPatient.getMedicalRecordById(
+                    medicalRecordId, patient.address
+                );
 
                 assert.equal(medicalRecordId.toString(), medicalRecordById.id.toString());
                 assert.equal(medicalRecord.timeAdded.toString(), medicalRecordById.timeAdded.toString());
@@ -410,7 +414,19 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 assert.equal(medicalRecord.hospital, medicalRecordById.hospital);
                 assert.equal(medicalRecord.details, medicalRecordById.details);
             });
-            it("shouldn't revert if medical record is found", async () => {
+
+            it("should't find a medical record by id", async () => {
+                const healthChainWithPatient = healthChain.connect(patient);
+                await healthChainWithPatient.createPatient(name, surname,
+                    dateOfBirth, email, telephone, telephone2, doctorTelephone,
+                    zipCode, city, country);
+
+                await expect(healthChainWithPatient.getMedicalRecordById(
+                    0, patient.address
+                )).to.be.revertedWith("HealthChain__MedicalRecordNotFound");
+            });
+
+            it("should revert if someone other than the actual owner of the medical record attemps to access that data", async () => {
                 const healthChainWithPatient = healthChain.connect(patient);
                 await healthChainWithPatient.createPatient(name, surname,
                     dateOfBirth, email, telephone, telephone2, doctorTelephone,
@@ -428,17 +444,33 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 const fileName = "fileName";
                 const hospital = "hospital";
                 const details = "details";
-                await healthChainWithDoctor.createMedicalRecord(
-                    requestId, patient.address, fileName, hospital, details);
+                await healthChainWithDoctor.createMedicalRecord(requestId, patient.address, fileName, hospital, details);
 
                 const medicalRecords = await healthChainWithPatient.getMedicalRecords(patient.address);
                 const medicalRecord = medicalRecords[0];
                 const medicalRecordId = medicalRecord.id;
 
-                // Check that the medical record is found without reverting
-                await expect(healthChainWithPatient.getMedicalRecordById(medicalRecordId, patient.address))
-                    .to.not.be.revertedWith("HealthChain__MedicalRecordNotFound");
+                await expect(healthChainWithDoctor.getMedicalRecordById(
+                    medicalRecordId, patient.address
+                )).to.be.revertedWith("HealthChain__cantAccessData");
             });
+
+            it("should revert if someone other than the actual owner of the requests attemps to access them", async () => {
+                const healthChainWithPatient = healthChain.connect(patient);
+                await healthChainWithPatient.createPatient(name, surname,
+                    dateOfBirth, email, telephone, telephone2, doctorTelephone,
+                    zipCode, city, country);
+                const healthChainWithDoctor = healthChain.connect(doctor);
+                await healthChainWithDoctor.createDoctor(name, surname,
+                    dateOfBirth, email, telephone,
+                    zipCode, city, country);
+
+                await healthChainWithDoctor.createRequest(patient.address);
+
+                await expect(healthChainWithDoctor.getRequests(patient.address))
+                    .to.be.revertedWith("HealthChain__notYourData");
+            });
+
 
         });
     });
