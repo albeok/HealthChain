@@ -149,7 +149,7 @@ contract HealthChain {
         string memory country
     ) public {
         if (
-            s_doctors[msg.sender].id == msg.sender &&
+            s_doctors[msg.sender].id == msg.sender ||
             s_patients[msg.sender].id == msg.sender
         ) {
             revert HealthChain__youAlreadyHaveAnAccount();
@@ -181,7 +181,7 @@ contract HealthChain {
         string memory country
     ) public {
         if (
-            s_patients[msg.sender].id == msg.sender &&
+            s_patients[msg.sender].id == msg.sender ||
             s_doctors[msg.sender].id == msg.sender
         ) {
             revert HealthChain__youAlreadyHaveAnAccount();
