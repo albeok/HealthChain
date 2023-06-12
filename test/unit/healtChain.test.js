@@ -189,9 +189,9 @@ const { developmentChains } = require("../../helper-hardhat-config")
                 const healthChainWithPatient = healthChain.connect(patient);
                 await healthChainWithPatient.createPatient(doctorId, name, surname,
                     dateOfBirth, email, telephone, telephone2, zipCode, city, country);
-                const patient1 = await healthChainWithPatient.getPatientData(patient.address);
+                const patientsDoctorAddress = await healthChainWithPatient.getPatientsDoctorAddress(patient.address);
                 const doctorIdToCompare = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
-                assert.equal(patient1.doctorId, doctorIdToCompare);
+                assert.equal(patientsDoctorAddress, doctorIdToCompare);
             });
 
             it("should revert if someone other than the actual patient attemps to access his/her data", async () => {

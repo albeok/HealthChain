@@ -56,7 +56,6 @@ contract HealthChain {
         string email;
         string telephone;
         string telephone2;
-        // string doctorTelephone;
         string zipCode;
         string city;
         string country;
@@ -425,11 +424,11 @@ contract HealthChain {
         revert HealthChain__cantAccessData();
     }
 
-    function getPatientsDoctorNumber(
+    function getPatientsDoctorAddress(
         address patientId
     ) public view patientExists(patientId) returns (address) {
-        address doctorTelephone = s_patients[patientId].doctorId;
-        return doctorTelephone;
+        address doctorId = s_patients[patientId].doctorId;
+        return doctorId;
     }
 
     function getMedicalRecords(
