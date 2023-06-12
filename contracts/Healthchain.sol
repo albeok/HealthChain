@@ -27,7 +27,8 @@ contract HealthChain {
     enum RequestStatus {
         Pending,
         Approved,
-        Rejected
+        Rejected,
+        Closed
     }
 
     //////////////////////////////////
@@ -48,13 +49,14 @@ contract HealthChain {
 
     struct Patient {
         address id;
+        address doctorId;
         string name;
         string surname;
         string dateOfBirth;
         string email;
         string telephone;
         string telephone2;
-        string doctorTelephone;
+        // string doctorTelephone;
         string zipCode;
         string city;
         string country;
@@ -72,8 +74,8 @@ contract HealthChain {
 
     struct Request {
         uint256 requestId;
-        address patientAddress;
-        address doctorAddress;
+        address patientId;
+        address doctorId;
         uint timestamp;
         RequestStatus status;
     }
@@ -97,20 +99,20 @@ contract HealthChain {
     event patientUpdated(address id, string name, string surname);
     event requestCreated(
         uint256 requestId,
-        address patientAddress,
-        address doctorAddress
+        address patientId,
+        address doctorId
     );
-    event requestApproved(uint256 requestId, address patientAddress);
-    event requestRejected(uint256 requestId, address patientAddress);
+    event requestApproved(uint256 requestId, address patientId);
+    event requestRejected(uint256 requestId, address patientId);
     event medicalRecordCreated(
         uint256 medicalRecordId,
-        address patientAddress,
-        address doctorAddress
+        address patientId,
+        address doctorId
     );
     event medicalRecordUpdated(
         uint256 medicalRecordId,
-        address patientAddress,
-        address doctorAddress
+        address patientId,
+        address doctorId
     );
 
     ///////////////////////////////////
@@ -169,13 +171,13 @@ contract HealthChain {
     }
 
     function createPatient(
+        address doctorId,
         string memory name,
         string memory surname,
         string memory dateOfBirth,
         string memory email,
         string memory telephone,
         string memory telephone2,
-        string memory doctorTelephone,
         string memory zipCode,
         string memory city,
         string memory country
@@ -188,13 +190,13 @@ contract HealthChain {
         }
         s_patients[msg.sender] = Patient(
             msg.sender,
+            doctorId,
             name,
             surname,
             dateOfBirth,
             email,
             telephone,
             telephone2,
-            doctorTelephone,
             zipCode,
             city,
             country
@@ -232,13 +234,13 @@ contract HealthChain {
 
     function updatePatient(
         address patientId,
+        address doctorId,
         string memory name,
         string memory surname,
         string memory dateOfBirth,
         string memory email,
         string memory telephone,
         string memory telephone2,
-        string memory doctorTelephone,
         string memory zipCode,
         string memory city,
         string memory country
@@ -247,13 +249,13 @@ contract HealthChain {
         if (patient.id != patientId) {
             revert HealthChain__notYourData();
         }
+        patient.doctorId = doctorId;
         patient.name = name;
         patient.surname = surname;
         patient.dateOfBirth = dateOfBirth;
         patient.email = email;
         patient.telephone = telephone;
         patient.telephone2 = telephone2;
-        patient.doctorTelephone = doctorTelephone;
         patient.zipCode = zipCode;
         patient.city = city;
         patient.country = country;
@@ -289,8 +291,8 @@ contract HealthChain {
         for (uint256 i = 0; i < requests.length; i++) {
             if (
                 requests[i].requestId == requestId &&
-                requests[i].patientAddress == msg.sender &&
-                requests[i].status != RequestStatus.Approved
+                requests[i].patientId == msg.sender &&
+                requests[i].status == RequestStatus.Pending
             ) {
                 foundRequest = true;
                 if (approved == true) {
@@ -321,11 +323,11 @@ contract HealthChain {
         for (uint256 i = 0; i < requests.length; i++) {
             if (
                 requests[i].requestId == requestId &&
-                requests[i].doctorAddress == msg.sender &&
+                requests[i].doctorId == msg.sender &&
                 requests[i].status == RequestStatus.Approved
             ) {
                 found = true;
-                requests[i].status = RequestStatus.Pending;
+                requests[i].status = RequestStatus.Closed;
                 uint256 medicalRecordId = uint256(
                     keccak256(abi.encodePacked(block.timestamp, msg.sender))
                 );
@@ -367,11 +369,11 @@ contract HealthChain {
         for (uint256 i = 0; i < requests.length; i++) {
             if (
                 requests[i].requestId == requestId &&
-                requests[i].doctorAddress == msg.sender &&
+                requests[i].doctorId == msg.sender &&
                 requests[i].status == RequestStatus.Approved
             ) {
                 approved = true;
-                requests[i].status = RequestStatus.Pending;
+                requests[i].status = RequestStatus.Closed;
                 break;
             }
         }
@@ -425,8 +427,8 @@ contract HealthChain {
 
     function getPatientsDoctorNumber(
         address patientId
-    ) public view patientExists(patientId) returns (string memory) {
-        string memory doctorTelephone = s_patients[patientId].doctorTelephone;
+    ) public view patientExists(patientId) returns (address) {
+        address doctorTelephone = s_patients[patientId].doctorId;
         return doctorTelephone;
     }
 

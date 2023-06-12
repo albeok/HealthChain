@@ -3,11 +3,13 @@ const fs = require("fs")
 const { network } = require("hardhat")
 
 module.exports = async () => {
-    if (process.env.UPDATE_FRONT_END) {
+    if (process.env.UPDATE_FRONT_END === "true") {
         console.log("Writing to front end...")
         await updateContractAddresses()
         await updateAbi()
         console.log("Front end written!")
+    } else {
+        console.log("Nothing to update for the front-end.");
     }
 }
 
